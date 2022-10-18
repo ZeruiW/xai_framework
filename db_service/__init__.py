@@ -14,4 +14,5 @@ def create_app(test_config=None):
     app.register_blueprint(db_imgnet1000.bp)
     app.register_blueprint(db_arxiv_cs.bp)
 
+
     return app
