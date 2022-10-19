@@ -1,0 +1,10 @@
+__pycache__
+
+.idea
+
+.ipynb_checkpoints
+
+model_service/xlnet/full_model_new/
+
+*.pt
+*.pth
