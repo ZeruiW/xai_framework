@@ -11,14 +11,6 @@ from . import shap_helper
 
 bp = Blueprint('shapservice', __name__, url_prefix='/shapservice')
 
-
-
-
-
-
-
-
-
 def pred(X):
     paper_data = []
     for x in X:
@@ -27,17 +19,9 @@ def pred(X):
 
     return get_scores("Hardware Architecture", paper_data, ptf=False)
 
-
-
-
-
-
 @bp.route('/', methods=['POST','GET'])
 def pred():
     if request.method == 'POST':
-
-
-
 
 
         predict_function = lambda z: pred(z)

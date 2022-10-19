@@ -6,7 +6,7 @@ import transformers, torch
 import gc
 import numpy as np
 from torch.nn import functional as F
-
+import ast
 
 from flask import (
     Blueprint, request, jsonify, send_file
@@ -57,10 +57,10 @@ def pipe_input_tensor(sample, label, tokenizer):
     inputs = tokenizer.encode_plus(
         sample, None, add_special_tokens=True, max_length=max_length, truncation=True)
     inputs = {
-        "input_ids": torch.tensor([inputs["input_ids"]]).to(device),
-        "attention_mask": torch.tensor([inputs["attention_mask"]]).to(device),
-        "labels": torch.tensor([label]).type(torch.LongTensor).to(device),
-        "token_type_ids": torch.tensor([inputs["token_type_ids"]]).to(device)
+        "input_ids": torch.tensor([inputs["input_ids"]]),
+        "attention_mask": torch.tensor([inputs["attention_mask"]]),
+        "labels": torch.tensor([label]).type(torch.LongTensor),
+        "token_type_ids": torch.tensor([inputs["token_type_ids"]])
     }
     return inputs
 
@@ -89,19 +89,23 @@ def pred():
         body = request.get_json()
         encodedsample = body['sample']
         sample = base64.b64decode(encodedsample).decode('utf-8')
-        label = body['label']
-
+        labelstr = body['label']
+        label = ast.literal_eval(labelstr)
+        print(label)
+        print(type(label))
+        print(sample)
+        print(tokenizer)
         inputs = pipe_input_tensor(sample, label, tokenizer)
         print(inputs)
-        # transform json to tensor
-
-        # predict
+        # # transform json to tensor
+        #
+        # # predict
         outputs = model(**inputs)
         logits = outputs.logits.cpu().detach().numpy()
-
+        #
         rs = {}
         rs['logits'] = logits.tolist()
-
+        #
         return jsonify(rs)
 
     elif request.method == 'GET':
