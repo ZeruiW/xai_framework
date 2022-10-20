@@ -15,9 +15,7 @@ def create_app(test_config=None):
         SECRET_KEY='dev',
     )
 
-    from . import tb_image_net_1000, tb_arxiv_cs, tb_explanation
-    app.register_blueprint(tb_image_net_1000.bp)
-    app.register_blueprint(tb_arxiv_cs.bp)
-    app.register_blueprint(tb_explanation.bp)
+    from . import xai_cam
+    app.register_blueprint(xai_cam.bp)
 
     return app
