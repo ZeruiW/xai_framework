@@ -77,24 +77,24 @@ def get_explanation():
         f = open(exp_output_path, 'wb')
         f.write(exp)
         # exp = np.load(exp_output_path)
-
+        #
         # grayscale_cam = exp['arr_0']
-
+        #
         # cursor = cnx.cursor()
         # l = []
         # q = (
         #     f"SELECT id, img_name, img_data, img_group, img_label FROM image_net_1000 WHERE img_group = 't2'")
-        # # print(q)
+        # print(q)
         # cursor.execute(q)
         # for (id, img_name, img_data, img_group, img_label) in cursor:
         #     l.append((id, img_name, get_response_image(
         #         img_data), img_group, img_label))
         #     # Image.open(io.BytesIO(img_data)).show()
-
+        #
         # cursor.close()
-
+        #
         # rgb_img = bytes_to_pil_image(l[0][2])
-
+        #
         # cam_image = show_cam_on_image(np.float32(
         #     rgb_img) / 255, grayscale_cam[0], use_rgb=True)
         # Image.fromarray(cam_image).show()
