@@ -1,3 +1,7 @@
+
+docker-compose up --build
+
+
 ### Run ResNet50 Model
 
 Dependence

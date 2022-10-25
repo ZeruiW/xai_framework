@@ -1,8 +1,8 @@
-Flask == 2.2.2
+Flask >= 2.2
 mysql-connector-python
 Pillow
 numpy
 requests
-pandas
-grad-cam
-
+torch
+torchvision
+torchaudio

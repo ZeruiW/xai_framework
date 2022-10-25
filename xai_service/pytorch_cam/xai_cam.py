@@ -1,25 +1,4 @@
-import asyncio
-import os
-import base64
-import time
-import threading
-from base64 import encodebytes
-import io
-import json
-from flask import (
-    Blueprint, request, jsonify
-)
-import numpy as np
-import requests
-
-from torchvision import models
-import torch.nn as nn
-import torch.cuda as cuda
-import torch
-import torchvision.transforms as T
-import cv2
-from PIL import Image
-
+from pytorch_grad_cam.utils.image import show_cam_on_image
 from pytorch_grad_cam import GradCAM, \
     HiResCAM, \
     ScoreCAM, \
@@ -31,13 +10,33 @@ from pytorch_grad_cam import GradCAM, \
     LayerCAM, \
     FullGrad, \
     GradCAMElementWise
+from PIL import Image
+import cv2
+import torchvision.transforms as T
+import torch
+import torch.cuda as cuda
+import torch.nn as nn
+from torchvision import models
+import shutil
+import requests
+import numpy as np
+from flask import (
+    Blueprint, request, jsonify, send_file
+)
+import json
+import io
+from base64 import encodebytes
+import time
+import base64
+import os
+from . import task_manager as tm
 
-
-from pytorch_grad_cam.utils.image import show_cam_on_image
+create_and_add_process = tm.create_and_add_process
+terminate_process = tm.terminate_process
+thread_holder_str = tm.thread_holder_str
 
 bp = Blueprint('pt_cam', __name__, url_prefix='/xai/pt_cam')
 
-thread_holder = {}
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 tmpdir = os.path.join(basedir, 'tmp')
@@ -47,27 +46,11 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 
 
-class MyThread(threading.Thread):
-    def __init__(self, run_func, run_func_args, *args, **kwargs):
-        super(MyThread, self).__init__(*args, **kwargs)
-        self._stop = threading.Event()
-        self.run_func = run_func
-        self.run_func_args = run_func_args
-
-    # function using _stop function
-    def stop(self):
-        self._stop.set()
-
-    def stopped(self):
-        return self._stop.isSet()
-
-    def run(self):
-        if self.stopped():
-            return
-        self.run_func(**self.run_func_args)
-
-
 def cam_task(form_data, task_name):
+
+    # print(form_data)
+    # print(task_name)
+
     print('# get image data')
     response = requests.get(
         form_data['db_service_url'], params={
@@ -99,20 +82,22 @@ def cam_task(form_data, task_name):
 
     target_layers = [model.layer4]
 
-    def get_img_np(path):
-        d = cv2.imread(path, 1)[:, :, ::-1]
-        return np.float32(d) / 255
-
     preprocessing = T.Compose([
         T.ToTensor(),
         T.Normalize(mean=[0.485, 0.456, 0.406],
                     std=[0.229, 0.224, 0.225])
     ])
 
-    grayscale_cam = []
-
     print("# cam gen")
     i = 0
+
+    # explanation save dir
+    e_save_dir = os.path.join(tmpdir, form_data['model_name'], form_data['method_name'],
+                              form_data['data_set_name'],  form_data['data_set_group_name'],  task_name)
+
+    if not os.path.isdir(e_save_dir):
+        os.makedirs(e_save_dir, exist_ok=True)
+
     for imgd in img_data:
         print(i, imgd[1])
         i += 1
@@ -131,32 +116,15 @@ def cam_task(form_data, task_name):
 
         # AblationCAM and ScoreCAM have batched implementations.
         # You can override the internal batch size for faster computation.
-        grayscale_cam = [imgd[1], cam(input_tensor=input_tensor,
-                                      targets=None,
-                                      aug_smooth=True,
-                                      eigen_smooth=False)[0]]
+        grayscale_cam = cam(input_tensor=input_tensor,
+                            targets=None,
+                            aug_smooth=True,
+                            eigen_smooth=False)[0]
 
-        exp_output_path = os.path.join(tmpdir, 'exp.npz')
+        np.save(os.path.join(e_save_dir, f'{imgd[1]}.npy'), grayscale_cam)
 
-        np.savez_compressed(exp_output_path, grayscale_cam)
-
-        payload = {'model_name': form_data['model_name'],
-                   'method_name': form_data['method_name'],
-                   'data_set_name': form_data['data_set_name'],
-                   'data_set_group_name': form_data['data_set_group_name'],
-                   'task_name': task_name}
-        files = [
-            ('explanation', ('exp.npz',
-                             open(exp_output_path, 'rb'), 'application/octet-stream'))
-        ]
-        headers = {}
-
-        response = requests.request(
-            "POST", form_data['explanation_db_service_url'], headers=headers, data=payload, files=files)
-
-        print(i, response.text)
-
-    thread_holder[task_name].stop()
+    shutil.make_archive(os.path.join(tmpdir, task_name), 'zip', e_save_dir)
+    shutil.rmtree(e_save_dir)
 
 
 def bytes_to_pil_image(b):
@@ -164,42 +132,32 @@ def bytes_to_pil_image(b):
         'RGB')
 
 
-@bp.route('/', methods=['POST'])
-def upload_paper():
+@bp.route('/', methods=['POST', 'GET'])
+def cam_func():
+    if request.method == 'GET':
+        task_name = request.args['task_name']
+
+        return send_file(os.path.join(tmpdir, f'{task_name}.zip'), as_attachment=True)
     if request.method == "POST":
         form_data = request.form
-        task_name = f"{time.time()}-{form_data['model_name'].lower()}-{form_data['method_name'].lower()}-{form_data['data_set_name'].lower()}-{form_data['data_set_group_name'].lower()}"
-        t = MyThread(cam_task, {
-            'task_name': task_name,
-            'form_data': form_data
+        task_name = f"{time.time()}|{form_data['model_name'].lower()}|{form_data['method_name'].lower()}|{form_data['data_set_name'].lower()}|{form_data['data_set_group_name'].lower()}"
+        process = create_and_add_process(task_name,
+                                         cam_task, (form_data, task_name))
+        process.start()
+        return jsonify({
+            'task_name': task_name
         })
-        t.start()
-        thread_holder[task_name] = t
-    return "done"
 
 
-def thread_holder_str():
-    rs = []
-    for tk in thread_holder.keys():
-        status = 'Running' if not thread_holder[tk].stopped() else "Stoped"
-        # rs.append(f"({tk}, {status})")
-        rs.append({
-            'name': tk,
-            'status': status
-        })
-    return rs
-
-
-@bp.route('/task', methods=['GET', 'POST'])
+@ bp.route('/task', methods=['GET', 'POST'])
 def list_task():
     if request.method == 'GET':
-        print(thread_holder_str())
-        for tk in thread_holder.keys():
-            t = thread_holder[tk]
+        tl = thread_holder_str()
+        return jsonify(tl)
     else:
         act = request.args['act']
         if act == 'stop':
-            thread_name = request.args['name']
-            thread_holder[thread_name].stop()
-            print(thread_holder_str())
+            task_name = request.args['task_name']
+            terminate_process(task_name)
+            # print(thread_holder_str())
     return ""
