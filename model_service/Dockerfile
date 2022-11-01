@@ -8,7 +8,7 @@ RUN python -m pip install --upgrade pip \
     
     && pip install -r requirements.txt
 
-COPY . .
+COPY ./ ./
 
 EXPOSE 5001
 

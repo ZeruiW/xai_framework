@@ -12,7 +12,7 @@ RUN apt-get update \
     && apt-get -qq autoremove \
     && apt-get -qq clean
     
-COPY . .
+COPY ./ ./
 
 EXPOSE 5004
 
